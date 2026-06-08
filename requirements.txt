@@ -1,0 +1,29 @@
+# --- AI / API ---
+anthropic>=0.28.0
+python-dotenv>=1.0.0
+
+# --- PDF handling ---
+pypdf2>=3.0.0
+pdfplumber>=0.11.0
+
+# --- Data science ---
+pandas>=2.2.0
+numpy>=2.0.0
+scipy>=1.13.0
+scikit-learn>=1.5.0
+statsmodels>=0.14.0
+
+# --- Visualisation (backend-side) ---
+matplotlib>=3.9.0
+seaborn>=0.13.0
+plotly>=5.22.0
+
+# --- Backend ---
+fastapi>=0.111.0
+uvicorn[standard]>=0.30.0
+sqlalchemy>=2.0.0
+
+# --- Utilities ---
+rich>=13.0.0
+httpx>=0.27.0
+python-multipart>=0.0.9
