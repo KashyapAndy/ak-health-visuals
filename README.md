@@ -8,8 +8,8 @@ A personal health dashboard tracking 15 years of pathology results, CBC panels, 
 
 ## Screenshot
 
-<!-- Add screenshot here: docs/screenshot.png -->
-> Run the app locally and capture your own — see **Running locally** below.
+<img width="2217" height="1236" alt="image" src="https://github.com/user-attachments/assets/09d7f836-da7c-4fd8-b1cc-7da9e66a3da9" />
+
 
 ---
 
