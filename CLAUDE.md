@@ -1,9 +1,10 @@
 # Health Dashboard — CLAUDE.md
 
 ## Project purpose
-Personal health dashboard for Anirudh Kashyap (AK).
+Personal health dashboard for Anirudh Kashyap (AK) and Rashmi Kashyap (RK, wife).
 Tracks pathology results, CBC, vitals over 15 years via PDF ingestion.
-RK (wife) data exists in the DB but the dashboard is AK-only — do not add a person switcher.
+A `PersonSwitcher` in the header toggles between AK and RK; backend endpoints
+already accept a `person` query param (`AK`/`RK`) for every route.
 
 ## Stack
 - **Ingestion**: Python + Claude API (claude-opus-4-8) for PDF parsing
@@ -75,7 +76,8 @@ Satoshi is loaded via `<link>` tag in layout.tsx (Fontshare, not Google Fonts �
 DM Mono is loaded via `next/font/google` with CSS variable `--font-dm-mono`.
 
 ### Page layout (app/page.tsx)
-- `PERSON = "AK"` hardcoded — no person switcher
+- `person` is component state (`useState<Person>("AK")`), toggled via `PersonSwitcher` in the header. Switching person refetches categories/latest/vitals and resets the active tab and selected biomarker.
+- The "5-Year Narrative" overview section (prose + milestone timeline) is hardcoded AK medical history — gated behind `person === "AK"`. RK's overview shows stats bar, flagged grid, and latest values only, until RK-specific narrative copy is written.
 - Sticky header with blur backdrop, horizontal tab bar
 - Tabs: Overview + one per category + Vitals
 - Switching tabs resets selected biomarker and chart

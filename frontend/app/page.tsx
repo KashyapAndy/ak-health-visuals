@@ -3,15 +3,17 @@
 import { useEffect, useState, useCallback } from "react";
 import { BiomarkerChart } from "@/components/BiomarkerChart";
 import { VitalsPanel } from "@/components/VitalsPanel";
+import { PersonSwitcher } from "@/components/PersonSwitcher";
 import {
   api,
   type CategoryGroup,
   type BiomarkerHistory,
   type LatestValue,
   type VitalsPoint,
+  type Person,
 } from "@/lib/api";
 
-const PERSON = "AK" as const;
+const PERSON_NAME: Record<Person, string> = { AK: "Anirudh Kashyap", RK: "Rashmi Kashyap" };
 
 // Portfolio design tokens — light "Warm Olive" theme
 const C = {
@@ -140,6 +142,7 @@ function StatCard({
 }
 
 export default function Dashboard() {
+  const [person, setPerson] = useState<Person>("AK");
   const [categories, setCategories] = useState<CategoryGroup[]>([]);
   const [activeTab, setActiveTab] = useState("overview");
   const [selectedBiomarker, setSelectedBiomarker] = useState("");
@@ -153,7 +156,10 @@ export default function Dashboard() {
   useEffect(() => {
     setLoading(true);
     setError(null);
-    Promise.all([api.categories(PERSON), api.latest(PERSON), api.vitals(PERSON)])
+    setActiveTab("overview");
+    setSelectedBiomarker("");
+    setChartData(null);
+    Promise.all([api.categories(person), api.latest(person), api.vitals(person)])
       .then(([cats, lat, vit]) => {
         setCategories(cats);
         setLatest(lat.filter(isQuantitative));
@@ -161,7 +167,7 @@ export default function Dashboard() {
       })
       .catch(() => setError("Cannot reach the API — is FastAPI running on port 8000?"))
       .finally(() => setLoading(false));
-  }, []);
+  }, [person]);
 
   const openBiomarker = useCallback(async (name: string, tab?: string) => {
     if (name === selectedBiomarker) {
@@ -170,10 +176,10 @@ export default function Dashboard() {
     setSelectedBiomarker(name);
     if (tab) setActiveTab(tab);
     setChartLoading(true); setChartData(null);
-    try { setChartData(await api.biomarker(name, PERSON)); }
+    try { setChartData(await api.biomarker(name, person)); }
     catch { setChartData(null); }
     finally { setChartLoading(false); }
-  }, [selectedBiomarker]);
+  }, [selectedBiomarker, person]);
 
   const switchTab = (id: string) => {
     setActiveTab(id); setSelectedBiomarker(""); setChartData(null);
@@ -219,25 +225,28 @@ export default function Dashboard() {
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "1.1rem 0 0" }}>
           <div>
             <div style={{ fontFamily: SANS, fontWeight: 700, fontSize: "1rem", color: C.text, letterSpacing: "-0.01em" }}>
-              ANIRUDH KASHYAP
+              {PERSON_NAME[person].toUpperCase()}
             </div>
             <div style={{ fontFamily: MONO, fontSize: "0.68rem", color: C.muted, marginTop: 2, letterSpacing: "0.04em" }}>
               {latest.length} biomarkers · {vitals.length} visits · 2010 – 2026
             </div>
           </div>
 
-          {flaggedCount > 0 && (
-            <div style={{
-              display: "flex", alignItems: "center", gap: 6,
-              background: "rgba(220,38,38,0.08)",
-              border: "1px solid rgba(220,38,38,0.2)",
-              color: C.red, padding: "5px 14px", borderRadius: 100,
-              fontFamily: MONO, fontSize: "0.72rem", fontWeight: 500,
-            }}>
-              <span style={{ width: 6, height: 6, borderRadius: "50%", background: C.red }} />
-              {flaggedCount} flagged
-            </div>
-          )}
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <PersonSwitcher person={person} onChange={setPerson} />
+            {flaggedCount > 0 && (
+              <div style={{
+                display: "flex", alignItems: "center", gap: 6,
+                background: "rgba(220,38,38,0.08)",
+                border: "1px solid rgba(220,38,38,0.2)",
+                color: C.red, padding: "5px 14px", borderRadius: 100,
+                fontFamily: MONO, fontSize: "0.72rem", fontWeight: 500,
+              }}>
+                <span style={{ width: 6, height: 6, borderRadius: "50%", background: C.red }} />
+                {flaggedCount} flagged
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Tab bar */}
@@ -292,7 +301,8 @@ export default function Dashboard() {
         {!loading && !error && activeTab === "overview" && (
           <div className="fade-up" style={{ display: "flex", flexDirection: "column", gap: 36 }}>
 
-            {/* ── 5-Year Narrative ──────────────────────────────── */}
+            {/* ── 5-Year Narrative (AK only — hardcoded medical history) ── */}
+            {person === "AK" && (
             <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
               <Eyebrow>5-Year Health Narrative</Eyebrow>
 
@@ -400,6 +410,7 @@ export default function Dashboard() {
                 );
               })()}
             </div>
+            )}
 
             {/* Stats row — matches portfolio stat bar style */}
             <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 13, display: "grid", gridTemplateColumns: "repeat(3, 1fr)" }}>
@@ -478,7 +489,7 @@ export default function Dashboard() {
       </main>
 
       <footer style={{ borderTop: `1px solid rgba(77,124,15,0.08)`, padding: "1.2rem 9%", textAlign: "center", fontFamily: MONO, fontSize: "0.72rem", color: C.ghost }}>
-        Anirudh Kashyap · Personal Health Record · Local &amp; Private
+        {PERSON_NAME[person]} · Personal Health Record · Local &amp; Private
       </footer>
     </div>
   );

@@ -2,9 +2,13 @@
 
 import type { Person } from "@/lib/api";
 
+const SANS = "'Satoshi', system-ui, sans-serif";
+
+const PERSON_LABEL: Record<Person, string> = { AK: "Anirudh", RK: "Rashmi" };
+
 export function PersonSwitcher({ person, onChange }: { person: Person; onChange: (p: Person) => void }) {
   return (
-    <div style={{ display: "flex", gap: 2, background: "#F0EBE3", borderRadius: 99, padding: 3 }}>
+    <div style={{ display: "flex", gap: 2, background: "#F0EBE0", border: "1px solid rgba(77,124,15,0.11)", borderRadius: 99, padding: 3 }}>
       {(["AK", "RK"] as Person[]).map((p) => (
         <button
           key={p}
@@ -14,15 +18,15 @@ export function PersonSwitcher({ person, onChange }: { person: Person; onChange:
             borderRadius: 99,
             border: "none",
             cursor: "pointer",
-            fontFamily: "var(--font-outfit, Outfit, sans-serif)",
+            fontFamily: SANS,
             fontSize: 13,
             fontWeight: person === p ? 600 : 400,
-            background: person === p ? "#0D1B2A" : "transparent",
+            background: person === p ? "#4D7C0F" : "transparent",
             color: person === p ? "#FAF7F2" : "#78716C",
             transition: "all 0.2s",
           }}
         >
-          {p === "AK" ? "Anirudh" : "Rashmi"}
+          {PERSON_LABEL[p]}
         </button>
       ))}
     </div>
