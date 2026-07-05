@@ -1,5 +1,5 @@
 """
-Phase 2: Extract structured health data from renamed PDFs using Claude API.
+Phase 2: Extract structured health data from renamed PDFs/HTML files using Claude API.
 
 Usage:
     python ingestion/extract.py --person AK
@@ -12,7 +12,6 @@ Skips files that already have a processed JSON (idempotent).
 
 import os
 import json
-import base64
 import argparse
 from pathlib import Path
 
@@ -21,6 +20,7 @@ from dotenv import load_dotenv
 from rich.console import Console
 from rich.progress import track
 from biomarker_map import normalize_name, normalize_unit, get_fallback_refs
+from doc_utils import SUPPORTED_SUFFIXES, build_content_blocks
 
 load_dotenv()
 console = Console()
@@ -30,7 +30,7 @@ RAW_DIR  = ROOT / "raw_pdfs"
 PROC_DIR = ROOT / "data" / "processed"
 client   = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
-EXTRACTION_PROMPT = """You are a medical records parser for a US-based patient. Extract all health data from this PDF.
+EXTRACTION_PROMPT = """You are a medical records parser for a US-based patient. Extract all health data from this document.
 
 Return ONLY a valid JSON object matching this exact schema — no markdown, no explanation:
 
@@ -94,22 +94,14 @@ def _strip_fences(raw: str) -> str:
     return raw
 
 
-def extract_pdf(pdf_path: Path, person: str) -> dict:
-    pdf_b64 = base64.standard_b64encode(pdf_path.read_bytes()).decode()
+def extract_file(path: Path, person: str) -> dict:
     response = client.messages.create(
         model="claude-opus-4-8",
         max_tokens=8192,
         messages=[{
             "role": "user",
             "content": [
-                {
-                    "type": "document",
-                    "source": {
-                        "type": "base64",
-                        "media_type": "application/pdf",
-                        "data": pdf_b64,
-                    },
-                },
+                *build_content_blocks(path),
                 {"type": "text", "text": EXTRACTION_PROMPT},
             ],
         }],
@@ -134,7 +126,7 @@ def extract_pdf(pdf_path: Path, person: str) -> dict:
         if bm.get("ref_low") is None and bm.get("ref_high") is None:
             bm["ref_low"], bm["ref_high"] = get_fallback_refs(canonical_name)
 
-    data["source_file"] = pdf_path.name
+    data["source_file"] = path.name
     data["person_id"]   = person
     return data
 
@@ -145,33 +137,33 @@ def process_person(person: str, single_file: str | None = None):
     person_proc.mkdir(parents=True, exist_ok=True)
 
     if single_file:
-        pdfs = [person_raw / single_file]
+        files = [person_raw / single_file]
     else:
-        pdfs = sorted(person_raw.glob("*.pdf"))
+        files = sorted(f for f in person_raw.iterdir() if f.suffix.lower() in SUPPORTED_SUFFIXES and f.is_file())
 
     to_process = []
-    for pdf in pdfs:
-        out = person_proc / f"{pdf.stem}.json"
+    for f in files:
+        out = person_proc / f"{f.stem}.json"
         if out.exists():
-            console.print(f"[dim]Skipping (already processed): {pdf.name}[/dim]")
+            console.print(f"[dim]Skipping (already processed): {f.name}[/dim]")
         else:
-            to_process.append(pdf)
+            to_process.append(f)
 
     if not to_process:
         console.print("[green]All files already processed.[/green]")
         return
 
     errors = []
-    for pdf in track(to_process, description=f"Extracting {person}..."):
-        out = person_proc / f"{pdf.stem}.json"
+    for f in track(to_process, description=f"Extracting {person}..."):
+        out = person_proc / f"{f.stem}.json"
         try:
-            data = extract_pdf(pdf, person)
+            data = extract_file(f, person)
             out.write_text(json.dumps(data, indent=2))
             n_bm = len(data.get("biomarkers", []))
-            console.print(f"[green]OK[/green] {pdf.name} -> {n_bm} biomarkers")
+            console.print(f"[green]OK[/green] {f.name} -> {n_bm} biomarkers")
         except Exception as e:
-            console.print(f"[red]FAIL[/red] {pdf.name}: {e}")
-            errors.append((pdf.name, str(e)))
+            console.print(f"[red]FAIL[/red] {f.name}: {e}")
+            errors.append((f.name, str(e)))
 
     if errors:
         console.print(f"\n[red]{len(errors)} file(s) failed:[/red]")
@@ -180,7 +172,7 @@ def process_person(person: str, single_file: str | None = None):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Extract health data from PDFs")
+    parser = argparse.ArgumentParser(description="Extract health data from PDFs/HTML files")
     parser.add_argument("--person", required=True, choices=["AK", "RK"])
     parser.add_argument("--file", help="Process a single file (filename only, not full path)")
     args = parser.parse_args()

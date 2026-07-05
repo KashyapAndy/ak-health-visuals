@@ -177,23 +177,28 @@ The pipeline is **four scripts** run in order. All are idempotent — safe to re
 
 ```
 ingestion/
-  rename.py          # Phase 1 — rename raw PDFs to YYYYMMDD_Provider_AK.pdf
+  rename.py          # Phase 1 — rename raw PDFs/HTML to YYYYMMDD_Provider_AK.<ext>
   extract.py         # Phase 2 — Claude API → structured JSON
   renormalize.py     # Phase 2b — re-apply biomarker_map without re-calling API
   load.py            # Phase 3 — JSON → SQLite
   biomarker_map.py   # Registry — canonical names, units, conversions, ref ranges
-  debug_noise.py     # Dev utility — inspect unrecognized biomarker names
+  doc_utils.py        # Shared helper — builds Claude content blocks for PDF or HTML source files
+  find_duplicates.py  # Dev utility — read-only report flagging likely duplicate reports across sources
+  debug_noise.py      # Dev utility — inspect unrecognized biomarker names
 ```
 
 ### Phase 1 — rename.py
-Renames PDFs dropped into `raw_pdfs/AK/` or `raw_pdfs/RK/` to the canonical `YYYYMMDD_Provider_PERSON.pdf` format. Originals are moved to `raw_pdfs/AK/archive/`.
+Renames PDFs **and HTML files** dropped into `raw_pdfs/AK/` or `raw_pdfs/RK/` to the canonical `YYYYMMDD_Provider_PERSON.<ext>` format (original extension preserved). Originals are moved to `raw_pdfs/<PERSON>/archive/`.
 
 ### Phase 2 — extract.py
-- Sends each PDF (base64-encoded) to `claude-opus-4-8` with a strict JSON extraction prompt
+- Sends each file to `claude-opus-4-8`: PDFs as base64 document blocks, HTML/HTM as raw text (there's no "document" media type for HTML in the Messages API — Claude reads inline markup fine)
 - The prompt instructs Claude to return raw names and raw units **exactly as printed** — normalization is handled by our code, not the model
 - After extraction, immediately applies `normalize_name()`, `normalize_unit()`, and `get_fallback_refs()` from `biomarker_map.py`
 - Output saved to `data/processed/<PERSON>/<filename>.json`
 - **Idempotent**: skips files that already have a `.json` output
+
+### find_duplicates.py — cross-source duplicate detection
+If a provider portal export (e.g. HTML) might be re-reporting a blood draw already captured by a PDF from another lab, run `python ingestion/find_duplicates.py --person RK` after `extract.py`. It compares `report_date` and biomarker value overlap across all processed JSONs for a person and prints a table of likely-duplicate pairs. It's **read-only** — it never deletes anything; you decide which source file (if any) to drop before running `load.py`.
 
 Key extraction rules baked into the prompt:
 - `report_date`: specimen collection date preferred over report date

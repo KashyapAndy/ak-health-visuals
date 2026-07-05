@@ -1,5 +1,5 @@
-# update.ps1 — Drop new PDFs into raw_pdfs/AK/ or raw_pdfs/NK/ and run this.
-# Usage: .\update.ps1 [-Person AK] [-Person NK] [-DryRun]
+# update.ps1 — Drop new PDFs/HTML files into raw_pdfs/AK/ or raw_pdfs/RK/ and run this.
+# Usage: .\update.ps1 [-Person AK] [-Person RK] [-DryRun]
 
 param(
     [ValidateSet("AK","RK","both")][string]$Person = "both",
