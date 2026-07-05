@@ -1,0 +1,38 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg:       #FAF7F2;
+  --color-surface:  #F0EBE0;
+  --color-card:     #FFFFFF;
+  --color-border:   rgba(77,124,15,0.11);
+  --color-olive:    #4D7C0F;
+  --color-olive-lt: #65A30D;
+  --color-amber:    #B45309;
+  --color-green:    #15803D;
+  --color-red:      #DC2626;
+  --color-text:     #1C1917;
+  --color-muted:    #78716C;
+  --color-ghost:    #A8A099;
+  --font-sans:      'Satoshi', 'Outfit', system-ui, sans-serif;
+  --font-mono:      'DM Mono', ui-monospace, monospace;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { font-size: 16px; scroll-behavior: smooth; }
+
+body {
+  font-family: 'Satoshi', 'Outfit', system-ui, sans-serif;
+  background: #FAF7F2;
+  color: #1C1917;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+}
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.fade-up { animation: fadeUp 0.45s cubic-bezier(0.25,0.46,0.45,0.94) both; }
+
+.recharts-tooltip-wrapper { outline: none; }
