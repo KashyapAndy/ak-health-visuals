@@ -169,6 +169,121 @@ CATEGORY_ORDER = [
 
 ---
 
+## Ingestion pipeline & ETL
+
+The pipeline is **four scripts** run in order. All are idempotent — safe to re-run.
+
+```
+ingestion/
+  rename.py          # Phase 1 — rename raw PDFs to YYYYMMDD_Provider_AK.pdf
+  extract.py         # Phase 2 — Claude API → structured JSON
+  renormalize.py     # Phase 2b — re-apply biomarker_map without re-calling API
+  load.py            # Phase 3 — JSON → SQLite
+  biomarker_map.py   # Registry — canonical names, units, conversions, ref ranges
+  debug_noise.py     # Dev utility — inspect unrecognized biomarker names
+```
+
+### Phase 1 — rename.py
+Renames PDFs dropped into `raw_pdfs/AK/` or `raw_pdfs/RK/` to the canonical `YYYYMMDD_Provider_PERSON.pdf` format. Originals are moved to `raw_pdfs/AK/archive/`.
+
+### Phase 2 — extract.py
+- Sends each PDF (base64-encoded) to `claude-opus-4-8` with a strict JSON extraction prompt
+- The prompt instructs Claude to return raw names and raw units **exactly as printed** — normalization is handled by our code, not the model
+- After extraction, immediately applies `normalize_name()`, `normalize_unit()`, and `get_fallback_refs()` from `biomarker_map.py`
+- Output saved to `data/processed/<PERSON>/<filename>.json`
+- **Idempotent**: skips files that already have a `.json` output
+
+Key extraction rules baked into the prompt:
+- `report_date`: specimen collection date preferred over report date
+- Numeric results → `value` field; qualitative results (Negative, Positive, Trace, 1+) → `text_value` field, `value = null`
+- eGFR `>60` reference → `ref_low=60, ref_high=null`
+- Vitals converted to US units (lbs, inches, °F) by the model
+
+### Phase 2b — renormalize.py
+Re-applies the latest `biomarker_map.py` to all existing JSONs **without** calling the Claude API again. Use this whenever the registry is updated (new aliases, unit conversions, ref ranges).
+
+Additional logic beyond basic normalization:
+- **% vs Abs disambiguation**: if a differential marker (e.g. Neutrophils %) has an absolute-count unit (k/uL, 10³/µL), it is renamed to the Abs variant (Neutrophils Abs)
+- **Deduplication**: within a single report JSON, keeps only the first occurrence of each canonical name — handles labs that print eGFR twice (non-African-Am and African-Am rows)
+- **Unit backfill**: if unit is still empty after normalization, fills from the registry's `canonical_unit`
+
+### Phase 3 — load.py
+- Reads all JSONs from `data/processed/<PERSON>/` and inserts into SQLite
+- **Idempotent**: checks `source_file` column in `reports` table; skips if already present
+- Inserts: one `reports` row, N `biomarkers` rows, one `vitals` row (if any vitals present)
+
+---
+
+## biomarker_map.py — canonical registry
+
+The registry is the single source of truth for all name and unit normalization. Every biomarker has:
+- `canonical_name` — display name used in DB and dashboard
+- `canonical_unit` — the one unit stored in DB
+- `unit_conversions` — dict of `raw_unit_alias → multiplier`. Conversion: `stored = raw × multiplier`
+- `name_aliases` — list of raw strings Claude might return (case-insensitive, noise-stripped)
+- `ref_low` / `ref_high` — fallback reference range if PDF didn't include one
+- `category` — dashboard grouping
+
+**Noise stripping** before alias lookup (via `_NOISE` regex):
+Strips words: `calculated`, `calc`, `serum`, `blood`, `level`, `levels` — so "Glucose, Serum" and "Glucose" both resolve to the same entry.
+
+### Unit conversion reference (key biomarkers)
+
+| Biomarker | Canonical Unit | Notable conversions |
+|---|---|---|
+| WBC, Platelets | 10³/µL | `/cumm` × 0.001, `/mm³` × 0.001 |
+| RBC | 10⁶/µL | `/cumm` × 0.000001 |
+| Hemoglobin | g/dL | `g/L` × 0.1, `mmol/L` × 1.6113 |
+| Hematocrit | % | `L/L` × 100 |
+| Glucose | mg/dL | `mmol/L` × 18.018 |
+| BUN | mg/dL | `mmol/L` × 2.8 |
+| Creatinine | mg/dL | `µmol/L` × 0.01131 |
+| Calcium | mg/dL | `mmol/L` × 4.008 |
+| Total Cholesterol, LDL, HDL | mg/dL | `mmol/L` × 38.67 |
+| Triglycerides | mg/dL | `mmol/L` × 88.57 |
+| TSH | mIU/L | `µIU/mL` × 1 (same scale) |
+| Free T4 | ng/dL | `pmol/L` × 0.07752 |
+| Vitamin D | ng/mL | `nmol/L` × 0.4006 |
+| Vitamin B12 | pg/mL | `pmol/L` × 1.355 |
+| Iron, TIBC | µg/dL | `µmol/L` × 5.585 |
+| CRP | mg/L | `mg/dL` × 10 |
+| HbA1c | % | `mmol/mol` × 0.09148 (IFCC→NGSP) |
+| Testosterone | ng/dL | `nmol/L` × 28.84 |
+| Cortisol | µg/dL | `nmol/L` × 0.03625 |
+
+### Adding a new biomarker to the registry
+
+1. Add a `Biomarker(...)` entry to `REGISTRY` in `biomarker_map.py`
+2. Include all raw name variants you've seen across labs as `name_aliases`
+3. Include all raw unit variants as `unit_conversions` with their multipliers
+4. Set `ref_low` / `ref_high` as a fallback (PDF-provided ranges take precedence at load time)
+5. Assign the correct `category` (must match `CATEGORY_ORDER` in `backend/main.py` for proper tab ordering)
+6. Run `python ingestion/renormalize.py` to apply to existing JSONs without re-calling the API
+7. Run `python ingestion/load.py` to reload into SQLite
+
+### Categories and dashboard tab order
+
+```python
+CATEGORY_ORDER = [
+    "CBC", "CBC Differential", "Metabolic", "Lipids",
+    "Thyroid", "Vitamins", "Iron Studies", "Hormones",
+    "Urinalysis", "Infectious Disease", "Pulmonary", "Other",
+]
+```
+Categories not in this list appear after in alphabetical order. `Drug Screen` is explicitly excluded from the dashboard (`EXCLUDED_CATEGORIES` in `backend/main.py`).
+
+### Data quality decisions recorded
+
+| Decision | Detail |
+|---|---|
+| Exclude 2018-11 | Sunrise Medical panel — unreliable data, all markers excluded from trending |
+| MIN_REPORTS = 2 | A biomarker must appear in ≥2 reports to show in dashboard — filters one-off noise |
+| Qualitative filter | `isQuantitative(v) = v.value !== null` — removes text-only readings (Yellow, Negative, Trace) from dashboard views |
+| eGFR dedup | Two eGFR rows per report (non-African-Am / African-Am) — renormalize.py keeps first occurrence only |
+| % vs Abs CBC | Differential markers reported in absolute-count units are renamed to Abs variant to avoid double-counting |
+
+---
+
 ## Medical context (AK)
 
 - **15-year record**: 2010 – present, 58+ quantitative biomarkers, 8+ lab visits
