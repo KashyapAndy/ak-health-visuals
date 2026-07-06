@@ -4,7 +4,7 @@ import {
   ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, ReferenceArea, ReferenceLine, ResponsiveContainer,
 } from "recharts";
-import type { BiomarkerHistory } from "@/lib/api";
+import type { BiomarkerHistory, Person } from "@/lib/api";
 import { getBiomarkerInfo } from "@/lib/biomarker-info";
 
 const C = {
@@ -19,8 +19,11 @@ const C = {
 const SANS = "'Satoshi', system-ui, sans-serif";
 const MONO = "var(--font-dm-mono, 'DM Mono', monospace)";
 
-const EVENTS = [
-  { date: "2025-04", label: "Thyroidectomy (PTC)", color: "#B45309" },
+// Scoped per person — AK's and RK's surgical histories are unrelated and
+// must never cross-contaminate each other's charts.
+const EVENTS: { date: string; label: string; color: string; person: Person }[] = [
+  { date: "2025-04", label: "Thyroidectomy (PTC)", color: "#B45309", person: "AK" },
+  { date: "2022-05", label: "Splenectomy", color: "#B45309", person: "RK" },
 ];
 
 function flagColor(flag: string | null) {
@@ -63,7 +66,7 @@ function CustomTooltip({ active, payload }: any) {
   );
 }
 
-export function BiomarkerChart({ data }: { data: BiomarkerHistory }) {
+export function BiomarkerChart({ data, person }: { data: BiomarkerHistory; person: Person }) {
   const { name, unit, ref_low, ref_high } = data;
   const points = data.data.filter(p => p.value !== null);
   if (!points.length) return null;
@@ -88,7 +91,7 @@ export function BiomarkerChart({ data }: { data: BiomarkerHistory }) {
   const baseChartDates = baseChartData.map(d => d.date);
   const firstDate = baseChartDates[0];
   const lastDate = baseChartDates[baseChartDates.length - 1];
-  const relevantEvents = EVENTS.filter(e => e.date >= firstDate && e.date <= lastDate);
+  const relevantEvents = EVENTS.filter(e => e.person === person && e.date >= firstDate && e.date <= lastDate);
   const chartData = [...baseChartData];
   for (const ev of relevantEvents) {
     if (!baseChartDates.includes(ev.date)) {

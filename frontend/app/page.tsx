@@ -6,6 +6,7 @@ import { VitalsPanel } from "@/components/VitalsPanel";
 import { PersonSwitcher } from "@/components/PersonSwitcher";
 import {
   api,
+  isFlagCurrent,
   type CategoryGroup,
   type BiomarkerHistory,
   type LatestValue,
@@ -162,7 +163,11 @@ export default function Dashboard() {
     Promise.all([api.categories(person), api.latest(person), api.vitals(person)])
       .then(([cats, lat, vit]) => {
         setCategories(cats);
-        setLatest(lat.filter(isQuantitative));
+        // A flag from a report older than the recency window is stale —
+        // clear it so no downstream view (stats bar, flagged grid, StatCard
+        // color) treats it as currently out of range. See CLAUDE.md "Flag
+        // recency rule".
+        setLatest(lat.filter(isQuantitative).map(v => isFlagCurrent(v.date) ? v : { ...v, flag: null }));
         setVitals(vit);
       })
       .catch(() => setError("Cannot reach the API — is FastAPI running on port 8000?"))
@@ -204,7 +209,7 @@ export default function Dashboard() {
         <p style={{ fontFamily: MONO, color: C.muted, fontSize: 13 }}>Loading…</p>
       </div>
     ) : chartData ? (
-      <BiomarkerChart data={chartData} />
+      <BiomarkerChart data={chartData} person={person} />
     ) : null
   );
 
@@ -301,7 +306,7 @@ export default function Dashboard() {
         {!loading && !error && activeTab === "overview" && (
           <div className="fade-up" style={{ display: "flex", flexDirection: "column", gap: 36 }}>
 
-            {/* ── 5-Year Narrative (AK only — hardcoded medical history) ── */}
+            {/* ── 5-Year Narrative (hardcoded per-person medical history) ── */}
             {person === "AK" && (
             <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
               <Eyebrow>5-Year Health Narrative</Eyebrow>
@@ -368,6 +373,113 @@ export default function Dashboard() {
                         <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
                           <span style={{ fontFamily: MONO, fontSize: 11, color: C.muted, letterSpacing: "0.05em", minWidth: 72 }}>{m.date}</span>
                           <span style={{ fontFamily: SANS, fontWeight: m.highlight ? 700 : 500, fontSize: 14, color: m.highlight ? C.amber : C.text }}>
+                            {m.label}
+                          </span>
+                        </div>
+                        <div style={{ fontFamily: MONO, fontSize: 11, color: C.ghost, marginTop: 2, paddingLeft: 82 }}>
+                          {m.note}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Dynamic trend chips — derived from latest values */}
+              {latest.length > 0 && (() => {
+                const flaggedHigh = latest.filter(v => v.flag?.toUpperCase() === "H");
+                const flaggedLow  = latest.filter(v => v.flag?.toUpperCase() === "L");
+                const normal      = latest.filter(v => !v.flag);
+                return (
+                  <div style={{
+                    background: C.card, border: `1px solid ${C.border}`, borderRadius: 13,
+                    padding: "20px 28px",
+                    display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 24,
+                  }}>
+                    {[
+                      { label: "Currently normal", count: normal.length, color: C.olive, bg: "rgba(77,124,15,0.07)" },
+                      { label: "Flagged high", count: flaggedHigh.length, color: C.red, bg: "rgba(220,38,38,0.07)" },
+                      { label: "Flagged low", count: flaggedLow.length, color: C.amber, bg: "rgba(180,83,9,0.07)" },
+                    ].map(s => (
+                      <div key={s.label} style={{ display: "flex", alignItems: "center", gap: 16 }}>
+                        <div style={{ width: 48, height: 48, borderRadius: 12, background: s.bg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                          <span style={{ fontFamily: MONO, fontWeight: 700, fontSize: 20, color: s.color }}>{s.count}</span>
+                        </div>
+                        <div>
+                          <div style={{ fontFamily: SANS, fontWeight: 600, fontSize: 14, color: C.text }}>{s.label}</div>
+                          <div style={{ fontFamily: MONO, fontSize: 11, color: C.ghost }}>of {latest.length} biomarkers</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+            </div>
+            )}
+
+            {/* ── 5-Year Narrative (RK — hardcoded medical history) ── */}
+            {person === "RK" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+              <Eyebrow>5-Year Health Narrative</Eyebrow>
+
+              {/* Prose card */}
+              <div style={{
+                background: C.card, border: `1px solid ${C.border}`, borderRadius: 13,
+                padding: "28px 32px",
+                boxShadow: "0 2px 12px rgba(77,124,15,0.05)",
+              }}>
+                <h2 style={{ fontFamily: SANS, fontWeight: 800, fontSize: "clamp(1.3rem,2.2vw,1.75rem)", color: C.text, letterSpacing: "-0.03em", lineHeight: 1.15, marginBottom: 12 }}>
+                  Six years under hematology follow-up. A splenectomy behind her. A new arrival ahead.
+                </h2>
+                <p style={{ fontFamily: SANS, fontSize: 15, color: C.muted, lineHeight: 1.85, maxWidth: 760, marginBottom: 16 }}>
+                  Since 2019, frequent CBC and differential panels — many drawn in-office at Northern Virginia
+                  Hematology Oncology Associates, others sent out to LabCorp — have built a close-interval
+                  record of blood counts. The defining event was a{" "}
+                  <strong style={{ color: C.text, fontWeight: 600 }}>splenectomy in May 2022</strong>,
+                  after which platelet counts commonly run higher than a pre-surgical baseline — a well
+                  documented consequence of losing splenic platelet sequestration — so that shift is expected
+                  rather than a new concern.
+                </p>
+                <p style={{ fontFamily: SANS, fontSize: 15, color: C.muted, lineHeight: 1.85, maxWidth: 760, marginBottom: 0 }}>
+                  <strong style={{ color: C.text, fontWeight: 600 }}>March 2026</strong> brought the newest
+                  chapter: the birth of their child. The visit cadence in this record reflects years of careful
+                  monitoring — a fitting backdrop for the milestone that followed.
+                </p>
+              </div>
+
+              {/* Timeline — milestone events */}
+              <div style={{
+                background: C.surface, border: `1px solid ${C.border}`, borderRadius: 13,
+                padding: "22px 28px",
+              }}>
+                <div style={{ fontFamily: MONO, fontSize: "0.68rem", fontWeight: 500, letterSpacing: "0.12em", textTransform: "uppercase", color: C.olive, marginBottom: 16 }}>
+                  Key Milestones
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+                  {[
+                    { date: "2019", label: "Hematology monitoring begins", note: "Regular CBC / differential follow-up at Northern Virginia Hematology Oncology Associates" },
+                    { date: "May 2022", label: "Splenectomy", note: "Surgical spleen removal", highlight: true, color: C.amber },
+                    { date: "2022–2025", label: "Post-splenectomy CBC surveillance", note: "Close-interval blood count monitoring continues" },
+                    { date: "Mar 2026", label: "Birth of their child", note: "🎉", highlight: true, color: C.green },
+                  ].map((m, i, arr) => (
+                    <div key={m.date} style={{ display: "flex", gap: 18, position: "relative" }}>
+                      {/* Vertical connector */}
+                      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", width: 16, flexShrink: 0 }}>
+                        <div style={{
+                          width: m.highlight ? 12 : 8, height: m.highlight ? 12 : 8,
+                          borderRadius: "50%",
+                          background: m.highlight ? (m.color ?? C.amber) : C.olive,
+                          border: `2px solid ${C.card}`,
+                          flexShrink: 0, marginTop: 3,
+                        }} />
+                        {i < arr.length - 1 && (
+                          <div style={{ width: 1, flex: 1, background: `rgba(77,124,15,0.2)`, minHeight: 20 }} />
+                        )}
+                      </div>
+                      <div style={{ paddingBottom: i < arr.length - 1 ? 20 : 0 }}>
+                        <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
+                          <span style={{ fontFamily: MONO, fontSize: 11, color: C.muted, letterSpacing: "0.05em", minWidth: 72 }}>{m.date}</span>
+                          <span style={{ fontFamily: SANS, fontWeight: m.highlight ? 700 : 500, fontSize: 14, color: m.highlight ? (m.color ?? C.amber) : C.text }}>
                             {m.label}
                           </span>
                         </div>

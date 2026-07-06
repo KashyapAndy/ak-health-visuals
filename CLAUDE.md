@@ -92,6 +92,9 @@ DM Mono is loaded via `next/font/google` with CSS variable `--font-dm-mono`.
 4. **Inline chart** — expands below flagged grid when a marker is selected
 5. **Latest values grid** — all 58+ quantitative markers as StatCards
 
+### Flag recency rule (applies to AK and RK)
+A biomarker is only shown as flagged (red/high or amber/low) if its **most recent report is within the last 2 years**. If the latest available test for that marker is older than 2 years, it must render as normal/unflagged regardless of the stored `flag` value or a ref-range comparison — an out-of-range result from 5 years ago is stale and not clinically relevant today. This affects every place a biomarker's status is colored from its latest value (e.g. `getStatus()` in `LatestCard.tsx`, the Overview flagged-values grid, stat tiles) — the recency check must be added wherever flag color is derived, not just one component.
+
 ### BiomarkerChart.tsx
 - ComposedChart with Area (gradient fill) + Line
 - **`connectNulls={true}`** on both Area and Line — critical, do not change. Event date injection adds null points; false breaks the line.

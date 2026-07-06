@@ -47,6 +47,17 @@ export interface VitalsPoint {
   temperature: number | null;
 }
 
+// A biomarker only counts as flagged if its latest report is within this
+// many years — an out-of-range result from years ago isn't clinically
+// relevant today. Applies to both AK and RK. See CLAUDE.md "Flag recency rule".
+const FLAG_RECENCY_YEARS = 2;
+
+export function isFlagCurrent(dateStr: string): boolean {
+  const cutoff = new Date();
+  cutoff.setFullYear(cutoff.getFullYear() - FLAG_RECENCY_YEARS);
+  return new Date(dateStr) >= cutoff;
+}
+
 async function get<T>(path: string): Promise<T> {
   const res = await fetch(`${BASE}${path}`, { cache: "no-store" });
   if (!res.ok) throw new Error(`API error ${res.status}: ${path}`);
