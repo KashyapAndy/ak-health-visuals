@@ -66,7 +66,7 @@ function CustomTooltip({ active, payload }: any) {
   );
 }
 
-export function BiomarkerChart({ data, person }: { data: BiomarkerHistory; person: Person }) {
+export function BiomarkerChart({ data, person, showInfo = true }: { data: BiomarkerHistory; person: Person; showInfo?: boolean }) {
   const { name, unit, ref_low, ref_high } = data;
   const points = data.data.filter(p => p.value !== null);
   if (!points.length) return null;
@@ -199,7 +199,7 @@ export function BiomarkerChart({ data, person }: { data: BiomarkerHistory; perso
       </div>
 
       {/* Info blurb — matches portfolio's mantra/attr-card aesthetic */}
-      {info && (
+      {showInfo && info && (
         <div style={{
           background: C.surface, borderRadius: 13, border: `1px solid ${C.border}`,
           padding: "20px 24px",

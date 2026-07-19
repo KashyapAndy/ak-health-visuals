@@ -66,8 +66,8 @@ function Eyebrow({ children }: { children: React.ReactNode }) {
 }
 
 function StatCard({
-  v, isSelected, onClick,
-}: { v: LatestValue; isSelected: boolean; onClick: () => void }) {
+  v, isSelected, onClick, inReport, onToggleReport,
+}: { v: LatestValue; isSelected: boolean; onClick: () => void; inReport: boolean; onToggleReport: () => void }) {
   const color = flagColor(v.flag);
   const tint = v.flag
     ? (v.flag.toUpperCase() === "H" ? C.redTint : C.amberTint)
@@ -109,6 +109,24 @@ function StatCard({
       {v.flag && (
         <div style={{ position: "absolute", inset: 0, background: tint, pointerEvents: "none" }} />
       )}
+
+      {/* Add-to-print-report checkbox */}
+      <div
+        role="checkbox"
+        aria-checked={inReport}
+        title={inReport ? "Remove from print report" : "Add to print report"}
+        onClick={e => { e.stopPropagation(); onToggleReport(); }}
+        style={{
+          position: "absolute", top: 10, right: 10, zIndex: 2,
+          width: 16, height: 16, borderRadius: 4,
+          border: `1.5px solid ${inReport ? C.olive : C.border}`,
+          background: inReport ? C.olive : C.card,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          cursor: "pointer", transition: TRANSITION,
+        }}
+      >
+        {inReport && <span style={{ color: C.card, fontSize: 10, lineHeight: 1, fontWeight: 700 }}>✓</span>}
+      </div>
 
       <div style={{ fontFamily: MONO, fontSize: "0.68rem", fontWeight: 500, color: C.muted, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", position: "relative" }}>
         {v.name}
@@ -153,6 +171,15 @@ export default function Dashboard() {
   const [vitals, setVitals] = useState<VitalsPoint[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [reportSelection, setReportSelection] = useState<Set<string>>(new Set());
+
+  const toggleReport = useCallback((name: string) => {
+    setReportSelection(prev => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name); else next.add(name);
+      return next;
+    });
+  }, []);
 
   useEffect(() => {
     setLoading(true);
@@ -160,6 +187,7 @@ export default function Dashboard() {
     setActiveTab("overview");
     setSelectedBiomarker("");
     setChartData(null);
+    setReportSelection(new Set());
     Promise.all([api.categories(person), api.latest(person), api.vitals(person)])
       .then(([cats, lat, vit]) => {
         setCategories(cats);
@@ -559,7 +587,7 @@ export default function Dashboard() {
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
                   {latest.filter(v => v.flag).map(v => (
-                    <StatCard key={v.name} v={v} isSelected={selectedBiomarker === v.name} onClick={() => openBiomarker(v.name, "overview")} />
+                    <StatCard key={v.name} v={v} isSelected={selectedBiomarker === v.name} onClick={() => openBiomarker(v.name, "overview")} inReport={reportSelection.has(v.name)} onToggleReport={() => toggleReport(v.name)} />
                   ))}
                 </div>
               </div>
@@ -572,7 +600,7 @@ export default function Dashboard() {
               <Eyebrow>Latest Values</Eyebrow>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
                 {latest.map(v => (
-                  <StatCard key={v.name} v={v} isSelected={selectedBiomarker === v.name} onClick={() => openBiomarker(v.name, "overview")} />
+                  <StatCard key={v.name} v={v} isSelected={selectedBiomarker === v.name} onClick={() => openBiomarker(v.name, "overview")} inReport={reportSelection.has(v.name)} onToggleReport={() => toggleReport(v.name)} />
                 ))}
               </div>
             </div>
@@ -586,7 +614,7 @@ export default function Dashboard() {
               <Eyebrow>{activeTab}</Eyebrow>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
                 {categoryLatest(activeTab).map(v => (
-                  <StatCard key={v.name} v={v} isSelected={selectedBiomarker === v.name} onClick={() => openBiomarker(v.name, activeTab)} />
+                  <StatCard key={v.name} v={v} isSelected={selectedBiomarker === v.name} onClick={() => openBiomarker(v.name, activeTab)} inReport={reportSelection.has(v.name)} onToggleReport={() => toggleReport(v.name)} />
                 ))}
               </div>
             </div>
@@ -603,6 +631,44 @@ export default function Dashboard() {
       <footer style={{ borderTop: `1px solid rgba(77,124,15,0.08)`, padding: "1.2rem 9%", textAlign: "center", fontFamily: MONO, fontSize: "0.72rem", color: C.ghost }}>
         {PERSON_NAME[person]} · Personal Health Record · Local &amp; Private
       </footer>
+
+      {/* Floating print-report bar */}
+      {reportSelection.size > 0 && (
+        <div style={{
+          position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)",
+          display: "flex", alignItems: "center", gap: 14,
+          background: C.text, color: C.bg, borderRadius: 100,
+          padding: "10px 12px 10px 20px",
+          boxShadow: "0 8px 32px rgba(28,25,23,0.25)",
+          zIndex: 50,
+        }}>
+          <span style={{ fontFamily: SANS, fontWeight: 600, fontSize: 13.5 }}>
+            {reportSelection.size} test{reportSelection.size !== 1 ? "s" : ""} selected
+          </span>
+          <button
+            onClick={() => setReportSelection(new Set())}
+            style={{
+              fontFamily: SANS, fontSize: 12.5, color: C.ghost, background: "transparent",
+              border: "none", cursor: "pointer", padding: "6px 4px",
+            }}
+          >
+            Clear
+          </button>
+          <a
+            href={`/print?person=${person}&markers=${encodeURIComponent(Array.from(reportSelection).join(","))}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              fontFamily: SANS, fontWeight: 600, fontSize: 13.5,
+              background: C.oliveLight, color: C.text,
+              borderRadius: 100, padding: "9px 18px",
+              textDecoration: "none", whiteSpace: "nowrap",
+            }}
+          >
+            Export as Print PDF →
+          </a>
+        </div>
+      )}
     </div>
   );
 }
