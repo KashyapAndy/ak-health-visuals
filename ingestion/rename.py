@@ -1,13 +1,13 @@
 """
-Phase 1: Rename all PDFs to YYYYMMDD_Provider_<PERSON>.pdf
+Phase 1: Rename all PDFs/HTML files to YYYYMMDD_Provider_<PERSON>.<ext>
 
 Usage:
     python ingestion/rename.py --person AK   # renames files in raw_pdfs/AK/
-    python ingestion/rename.py --person NK
+    python ingestion/rename.py --person RK
     python ingestion/rename.py --person AK --dry-run
 
 For UUID-named or unrecognizable files, the script calls the Claude API
-to read the PDF and infer the lab name and date of service.
+to read the document and infer the lab name and date of service.
 
 Originals are moved to raw_pdfs/<PERSON>/archive/ before renaming.
 """
@@ -18,7 +18,6 @@ import sys
 import json
 import shutil
 import argparse
-import base64
 from pathlib import Path
 from datetime import datetime
 
@@ -26,6 +25,8 @@ import anthropic
 from dotenv import load_dotenv
 from rich.console import Console
 from rich.table import Table
+
+from doc_utils import SUPPORTED_SUFFIXES, build_content_blocks
 
 load_dotenv()
 console = Console()
@@ -118,7 +119,7 @@ def try_pattern_rename(stem: str) -> tuple[str, str] | None:
 # ---------------------------------------------------------------------------
 
 EXTRACTION_PROMPT = """You are a medical document parser.
-Read this PDF and return ONLY a JSON object with these fields:
+Read this document and return ONLY a JSON object with these fields:
 {
   "date": "YYYYMMDD",        // date of service or report date (best guess)
   "provider": "ProviderName" // lab or clinic name, no spaces, TitleCase
@@ -128,23 +129,15 @@ If you cannot determine the provider, use "UnknownLab".
 Return ONLY the JSON object, nothing else."""
 
 
-def claude_infer(pdf_path: Path) -> tuple[str, str]:
-    """Ask Claude to extract date + provider from a PDF."""
-    pdf_b64 = base64.standard_b64encode(pdf_path.read_bytes()).decode()
+def claude_infer(path: Path) -> tuple[str, str]:
+    """Ask Claude to extract date + provider from a PDF or HTML file."""
     response = client.messages.create(
         model="claude-opus-4-8",
         max_tokens=256,
         messages=[{
             "role": "user",
             "content": [
-                {
-                    "type": "document",
-                    "source": {
-                        "type": "base64",
-                        "media_type": "application/pdf",
-                        "data": pdf_b64,
-                    },
-                },
+                *build_content_blocks(path),
                 {"type": "text", "text": EXTRACTION_PROMPT},
             ],
         }],
@@ -154,7 +147,7 @@ def claude_infer(pdf_path: Path) -> tuple[str, str]:
         data = json.loads(raw)
         return data.get("date", "00000000"), data.get("provider", "UnknownLab")
     except json.JSONDecodeError:
-        console.print(f"[yellow]Warning: Claude returned non-JSON for {pdf_path.name}[/yellow]")
+        console.print(f"[yellow]Warning: Claude returned non-JSON for {path.name}[/yellow]")
         return "00000000", "UnknownLab"
 
 
@@ -162,12 +155,12 @@ def claude_infer(pdf_path: Path) -> tuple[str, str]:
 # Main rename logic
 # ---------------------------------------------------------------------------
 
-def build_new_name(date_str: str, provider: str, person: str, existing: set[str]) -> str:
+def build_new_name(date_str: str, provider: str, person: str, existing: set[str], suffix: str) -> str:
     base = f"{date_str}_{provider}_{person}"
-    candidate = f"{base}.pdf"
+    candidate = f"{base}{suffix}"
     counter = 1
     while candidate in existing:
-        candidate = f"{base}_{counter}.pdf"
+        candidate = f"{base}_{counter}{suffix}"
         counter += 1
     return candidate
 
@@ -180,9 +173,9 @@ def rename_all(person: str, dry_run: bool = False):
         console.print(f"[red]Folder not found: {person_dir}[/red]")
         sys.exit(1)
 
-    pdfs = [f for f in person_dir.iterdir() if f.suffix.lower() == ".pdf" and f.is_file()]
-    if not pdfs:
-        console.print(f"[yellow]No PDFs found in {person_dir}[/yellow]")
+    files = [f for f in person_dir.iterdir() if f.suffix.lower() in SUPPORTED_SUFFIXES and f.is_file()]
+    if not files:
+        console.print(f"[yellow]No PDFs or HTML files found in {person_dir}[/yellow]")
         return
 
     table = Table(title=f"Rename Plan — {person}", show_lines=True)
@@ -193,21 +186,21 @@ def rename_all(person: str, dry_run: bool = False):
     used_names: set[str] = set()
     plan: list[tuple[Path, str, str]] = []
 
-    for pdf in sorted(pdfs):
-        stem = pdf.stem
+    for path in sorted(files):
+        stem = path.stem
         result = try_pattern_rename(stem)
         if result:
             date_str, provider = result
             method = "pattern"
         else:
-            console.print(f"[cyan]Calling Claude for:[/cyan] {pdf.name}")
-            date_str, provider = claude_infer(pdf)
+            console.print(f"[cyan]Calling Claude for:[/cyan] {path.name}")
+            date_str, provider = claude_infer(path)
             method = "claude"
 
-        new_name = build_new_name(date_str, provider, person, used_names)
+        new_name = build_new_name(date_str, provider, person, used_names, path.suffix.lower())
         used_names.add(new_name)
-        plan.append((pdf, new_name, method))
-        table.add_row(pdf.name, new_name, method)
+        plan.append((path, new_name, method))
+        table.add_row(path.name, new_name, method)
 
     console.print(table)
 
@@ -216,18 +209,18 @@ def rename_all(person: str, dry_run: bool = False):
         return
 
     archive_dir.mkdir(parents=True, exist_ok=True)
-    for pdf, new_name, _ in plan:
+    for path, new_name, _ in plan:
         # Archive original
-        shutil.copy2(pdf, archive_dir / pdf.name)
+        shutil.copy2(path, archive_dir / path.name)
         # Rename in place
-        pdf.rename(person_dir / new_name)
+        path.rename(person_dir / new_name)
 
     console.print(f"[green]Done. {len(plan)} files renamed. Originals backed up to {archive_dir}[/green]")
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Rename health PDFs to standard format")
-    parser.add_argument("--person", required=True, choices=["AK", "RK"], help="Whose PDFs to rename")
+    parser = argparse.ArgumentParser(description="Rename health PDFs/HTML files to standard format")
+    parser.add_argument("--person", required=True, choices=["AK", "RK"], help="Whose files to rename")
     parser.add_argument("--dry-run", action="store_true", help="Preview renames without moving files")
     args = parser.parse_args()
     rename_all(args.person, args.dry_run)

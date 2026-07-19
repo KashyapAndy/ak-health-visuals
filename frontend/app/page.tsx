@@ -3,15 +3,18 @@
 import { useEffect, useState, useCallback } from "react";
 import { BiomarkerChart } from "@/components/BiomarkerChart";
 import { VitalsPanel } from "@/components/VitalsPanel";
+import { PersonSwitcher } from "@/components/PersonSwitcher";
 import {
   api,
+  isFlagCurrent,
   type CategoryGroup,
   type BiomarkerHistory,
   type LatestValue,
   type VitalsPoint,
+  type Person,
 } from "@/lib/api";
 
-const PERSON = "AK" as const;
+const PERSON_NAME: Record<Person, string> = { AK: "Anirudh Kashyap", RK: "Rashmi Kashyap" };
 
 // Portfolio design tokens — light "Warm Olive" theme
 const C = {
@@ -63,8 +66,8 @@ function Eyebrow({ children }: { children: React.ReactNode }) {
 }
 
 function StatCard({
-  v, isSelected, onClick,
-}: { v: LatestValue; isSelected: boolean; onClick: () => void }) {
+  v, isSelected, onClick, inReport, onToggleReport,
+}: { v: LatestValue; isSelected: boolean; onClick: () => void; inReport: boolean; onToggleReport: () => void }) {
   const color = flagColor(v.flag);
   const tint = v.flag
     ? (v.flag.toUpperCase() === "H" ? C.redTint : C.amberTint)
@@ -107,6 +110,24 @@ function StatCard({
         <div style={{ position: "absolute", inset: 0, background: tint, pointerEvents: "none" }} />
       )}
 
+      {/* Add-to-print-report checkbox */}
+      <div
+        role="checkbox"
+        aria-checked={inReport}
+        title={inReport ? "Remove from print report" : "Add to print report"}
+        onClick={e => { e.stopPropagation(); onToggleReport(); }}
+        style={{
+          position: "absolute", top: 10, right: 10, zIndex: 2,
+          width: 16, height: 16, borderRadius: 4,
+          border: `1.5px solid ${inReport ? C.olive : C.border}`,
+          background: inReport ? C.olive : C.card,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          cursor: "pointer", transition: TRANSITION,
+        }}
+      >
+        {inReport && <span style={{ color: C.card, fontSize: 10, lineHeight: 1, fontWeight: 700 }}>✓</span>}
+      </div>
+
       <div style={{ fontFamily: MONO, fontSize: "0.68rem", fontWeight: 500, color: C.muted, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", position: "relative" }}>
         {v.name}
       </div>
@@ -140,6 +161,7 @@ function StatCard({
 }
 
 export default function Dashboard() {
+  const [person, setPerson] = useState<Person>("AK");
   const [categories, setCategories] = useState<CategoryGroup[]>([]);
   const [activeTab, setActiveTab] = useState("overview");
   const [selectedBiomarker, setSelectedBiomarker] = useState("");
@@ -149,19 +171,36 @@ export default function Dashboard() {
   const [vitals, setVitals] = useState<VitalsPoint[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [reportSelection, setReportSelection] = useState<Set<string>>(new Set());
+
+  const toggleReport = useCallback((name: string) => {
+    setReportSelection(prev => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name); else next.add(name);
+      return next;
+    });
+  }, []);
 
   useEffect(() => {
     setLoading(true);
     setError(null);
-    Promise.all([api.categories(PERSON), api.latest(PERSON), api.vitals(PERSON)])
+    setActiveTab("overview");
+    setSelectedBiomarker("");
+    setChartData(null);
+    setReportSelection(new Set());
+    Promise.all([api.categories(person), api.latest(person), api.vitals(person)])
       .then(([cats, lat, vit]) => {
         setCategories(cats);
-        setLatest(lat.filter(isQuantitative));
+        // A flag from a report older than the recency window is stale —
+        // clear it so no downstream view (stats bar, flagged grid, StatCard
+        // color) treats it as currently out of range. See CLAUDE.md "Flag
+        // recency rule".
+        setLatest(lat.filter(isQuantitative).map(v => isFlagCurrent(v.date) ? v : { ...v, flag: null }));
         setVitals(vit);
       })
       .catch(() => setError("Cannot reach the API — is FastAPI running on port 8000?"))
       .finally(() => setLoading(false));
-  }, []);
+  }, [person]);
 
   const openBiomarker = useCallback(async (name: string, tab?: string) => {
     if (name === selectedBiomarker) {
@@ -170,10 +209,10 @@ export default function Dashboard() {
     setSelectedBiomarker(name);
     if (tab) setActiveTab(tab);
     setChartLoading(true); setChartData(null);
-    try { setChartData(await api.biomarker(name, PERSON)); }
+    try { setChartData(await api.biomarker(name, person)); }
     catch { setChartData(null); }
     finally { setChartLoading(false); }
-  }, [selectedBiomarker]);
+  }, [selectedBiomarker, person]);
 
   const switchTab = (id: string) => {
     setActiveTab(id); setSelectedBiomarker(""); setChartData(null);
@@ -198,7 +237,7 @@ export default function Dashboard() {
         <p style={{ fontFamily: MONO, color: C.muted, fontSize: 13 }}>Loading…</p>
       </div>
     ) : chartData ? (
-      <BiomarkerChart data={chartData} />
+      <BiomarkerChart data={chartData} person={person} />
     ) : null
   );
 
@@ -219,29 +258,32 @@ export default function Dashboard() {
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "1.1rem 0 0" }}>
           <div>
             <div style={{ fontFamily: SANS, fontWeight: 700, fontSize: "1rem", color: C.text, letterSpacing: "-0.01em" }}>
-              ANIRUDH KASHYAP
+              {PERSON_NAME[person].toUpperCase()}
             </div>
             <div style={{ fontFamily: MONO, fontSize: "0.68rem", color: C.muted, marginTop: 2, letterSpacing: "0.04em" }}>
               {latest.length} biomarkers · {vitals.length} visits · 2010 – 2026
             </div>
           </div>
 
-          {flaggedCount > 0 && (
-            <div style={{
-              display: "flex", alignItems: "center", gap: 6,
-              background: "rgba(220,38,38,0.08)",
-              border: "1px solid rgba(220,38,38,0.2)",
-              color: C.red, padding: "5px 14px", borderRadius: 100,
-              fontFamily: MONO, fontSize: "0.72rem", fontWeight: 500,
-            }}>
-              <span style={{ width: 6, height: 6, borderRadius: "50%", background: C.red }} />
-              {flaggedCount} flagged
-            </div>
-          )}
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <PersonSwitcher person={person} onChange={setPerson} />
+            {flaggedCount > 0 && (
+              <div style={{
+                display: "flex", alignItems: "center", gap: 6,
+                background: "rgba(220,38,38,0.08)",
+                border: "1px solid rgba(220,38,38,0.2)",
+                color: C.red, padding: "5px 14px", borderRadius: 100,
+                fontFamily: MONO, fontSize: "0.72rem", fontWeight: 500,
+              }}>
+                <span style={{ width: 6, height: 6, borderRadius: "50%", background: C.red }} />
+                {flaggedCount} flagged
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Tab bar */}
-        <div style={{ display: "flex", gap: 0, overflowX: "auto", marginTop: "0.5rem" }}>
+        <div className="tab-scroll" style={{ display: "flex", gap: 0, overflowX: "auto", marginTop: "0.5rem" }}>
           {tabs.map(t => {
             const isActive = activeTab === t.id;
             return (
@@ -292,7 +334,8 @@ export default function Dashboard() {
         {!loading && !error && activeTab === "overview" && (
           <div className="fade-up" style={{ display: "flex", flexDirection: "column", gap: 36 }}>
 
-            {/* ── 5-Year Narrative ──────────────────────────────── */}
+            {/* ── 5-Year Narrative (hardcoded per-person medical history) ── */}
+            {person === "AK" && (
             <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
               <Eyebrow>5-Year Health Narrative</Eyebrow>
 
@@ -400,6 +443,114 @@ export default function Dashboard() {
                 );
               })()}
             </div>
+            )}
+
+            {/* ── 5-Year Narrative (RK — hardcoded medical history) ── */}
+            {person === "RK" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+              <Eyebrow>5-Year Health Narrative</Eyebrow>
+
+              {/* Prose card */}
+              <div style={{
+                background: C.card, border: `1px solid ${C.border}`, borderRadius: 13,
+                padding: "28px 32px",
+                boxShadow: "0 2px 12px rgba(77,124,15,0.05)",
+              }}>
+                <h2 style={{ fontFamily: SANS, fontWeight: 800, fontSize: "clamp(1.3rem,2.2vw,1.75rem)", color: C.text, letterSpacing: "-0.03em", lineHeight: 1.15, marginBottom: 12 }}>
+                  Six years under hematology follow-up. A splenectomy behind her. A new arrival ahead.
+                </h2>
+                <p style={{ fontFamily: SANS, fontSize: 15, color: C.muted, lineHeight: 1.85, maxWidth: 760, marginBottom: 16 }}>
+                  Since 2019, frequent CBC and differential panels — many drawn in-office at Northern Virginia
+                  Hematology Oncology Associates, others sent out to LabCorp — have built a close-interval
+                  record of blood counts. The defining event was a{" "}
+                  <strong style={{ color: C.text, fontWeight: 600 }}>splenectomy in May 2022</strong>,
+                  after which platelet counts commonly run higher than a pre-surgical baseline — a well
+                  documented consequence of losing splenic platelet sequestration — so that shift is expected
+                  rather than a new concern.
+                </p>
+                <p style={{ fontFamily: SANS, fontSize: 15, color: C.muted, lineHeight: 1.85, maxWidth: 760, marginBottom: 0 }}>
+                  <strong style={{ color: C.text, fontWeight: 600 }}>March 2026</strong> brought the newest
+                  chapter: the birth of their child. The visit cadence in this record reflects years of careful
+                  monitoring — a fitting backdrop for the milestone that followed.
+                </p>
+              </div>
+
+              {/* Timeline — milestone events */}
+              <div style={{
+                background: C.surface, border: `1px solid ${C.border}`, borderRadius: 13,
+                padding: "22px 28px",
+              }}>
+                <div style={{ fontFamily: MONO, fontSize: "0.68rem", fontWeight: 500, letterSpacing: "0.12em", textTransform: "uppercase", color: C.olive, marginBottom: 16 }}>
+                  Key Milestones
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+                  {[
+                    { date: "2019", label: "Hematology monitoring begins", note: "Regular CBC / differential follow-up at Northern Virginia Hematology Oncology Associates" },
+                    { date: "May 2022", label: "Splenectomy", note: "Surgical spleen removal", highlight: true, color: C.amber },
+                    { date: "2022–2025", label: "Post-splenectomy CBC surveillance", note: "Close-interval blood count monitoring continues" },
+                    { date: "Mar 2026", label: "Birth of their child", note: "🎉", highlight: true, color: C.green },
+                  ].map((m, i, arr) => (
+                    <div key={m.date} style={{ display: "flex", gap: 18, position: "relative" }}>
+                      {/* Vertical connector */}
+                      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", width: 16, flexShrink: 0 }}>
+                        <div style={{
+                          width: m.highlight ? 12 : 8, height: m.highlight ? 12 : 8,
+                          borderRadius: "50%",
+                          background: m.highlight ? (m.color ?? C.amber) : C.olive,
+                          border: `2px solid ${C.card}`,
+                          flexShrink: 0, marginTop: 3,
+                        }} />
+                        {i < arr.length - 1 && (
+                          <div style={{ width: 1, flex: 1, background: `rgba(77,124,15,0.2)`, minHeight: 20 }} />
+                        )}
+                      </div>
+                      <div style={{ paddingBottom: i < arr.length - 1 ? 20 : 0 }}>
+                        <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
+                          <span style={{ fontFamily: MONO, fontSize: 11, color: C.muted, letterSpacing: "0.05em", minWidth: 72 }}>{m.date}</span>
+                          <span style={{ fontFamily: SANS, fontWeight: m.highlight ? 700 : 500, fontSize: 14, color: m.highlight ? (m.color ?? C.amber) : C.text }}>
+                            {m.label}
+                          </span>
+                        </div>
+                        <div style={{ fontFamily: MONO, fontSize: 11, color: C.ghost, marginTop: 2, paddingLeft: 82 }}>
+                          {m.note}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Dynamic trend chips — derived from latest values */}
+              {latest.length > 0 && (() => {
+                const flaggedHigh = latest.filter(v => v.flag?.toUpperCase() === "H");
+                const flaggedLow  = latest.filter(v => v.flag?.toUpperCase() === "L");
+                const normal      = latest.filter(v => !v.flag);
+                return (
+                  <div style={{
+                    background: C.card, border: `1px solid ${C.border}`, borderRadius: 13,
+                    padding: "20px 28px",
+                    display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 24,
+                  }}>
+                    {[
+                      { label: "Currently normal", count: normal.length, color: C.olive, bg: "rgba(77,124,15,0.07)" },
+                      { label: "Flagged high", count: flaggedHigh.length, color: C.red, bg: "rgba(220,38,38,0.07)" },
+                      { label: "Flagged low", count: flaggedLow.length, color: C.amber, bg: "rgba(180,83,9,0.07)" },
+                    ].map(s => (
+                      <div key={s.label} style={{ display: "flex", alignItems: "center", gap: 16 }}>
+                        <div style={{ width: 48, height: 48, borderRadius: 12, background: s.bg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                          <span style={{ fontFamily: MONO, fontWeight: 700, fontSize: 20, color: s.color }}>{s.count}</span>
+                        </div>
+                        <div>
+                          <div style={{ fontFamily: SANS, fontWeight: 600, fontSize: 14, color: C.text }}>{s.label}</div>
+                          <div style={{ fontFamily: MONO, fontSize: 11, color: C.ghost }}>of {latest.length} biomarkers</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+            </div>
+            )}
 
             {/* Stats row — matches portfolio stat bar style */}
             <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 13, display: "grid", gridTemplateColumns: "repeat(3, 1fr)" }}>
@@ -436,7 +587,7 @@ export default function Dashboard() {
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
                   {latest.filter(v => v.flag).map(v => (
-                    <StatCard key={v.name} v={v} isSelected={selectedBiomarker === v.name} onClick={() => openBiomarker(v.name, "overview")} />
+                    <StatCard key={v.name} v={v} isSelected={selectedBiomarker === v.name} onClick={() => openBiomarker(v.name, "overview")} inReport={reportSelection.has(v.name)} onToggleReport={() => toggleReport(v.name)} />
                   ))}
                 </div>
               </div>
@@ -449,7 +600,7 @@ export default function Dashboard() {
               <Eyebrow>Latest Values</Eyebrow>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
                 {latest.map(v => (
-                  <StatCard key={v.name} v={v} isSelected={selectedBiomarker === v.name} onClick={() => openBiomarker(v.name, "overview")} />
+                  <StatCard key={v.name} v={v} isSelected={selectedBiomarker === v.name} onClick={() => openBiomarker(v.name, "overview")} inReport={reportSelection.has(v.name)} onToggleReport={() => toggleReport(v.name)} />
                 ))}
               </div>
             </div>
@@ -463,7 +614,7 @@ export default function Dashboard() {
               <Eyebrow>{activeTab}</Eyebrow>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
                 {categoryLatest(activeTab).map(v => (
-                  <StatCard key={v.name} v={v} isSelected={selectedBiomarker === v.name} onClick={() => openBiomarker(v.name, activeTab)} />
+                  <StatCard key={v.name} v={v} isSelected={selectedBiomarker === v.name} onClick={() => openBiomarker(v.name, activeTab)} inReport={reportSelection.has(v.name)} onToggleReport={() => toggleReport(v.name)} />
                 ))}
               </div>
             </div>
@@ -478,8 +629,46 @@ export default function Dashboard() {
       </main>
 
       <footer style={{ borderTop: `1px solid rgba(77,124,15,0.08)`, padding: "1.2rem 9%", textAlign: "center", fontFamily: MONO, fontSize: "0.72rem", color: C.ghost }}>
-        Anirudh Kashyap · Personal Health Record · Local &amp; Private
+        {PERSON_NAME[person]} · Personal Health Record · Local &amp; Private
       </footer>
+
+      {/* Floating print-report bar */}
+      {reportSelection.size > 0 && (
+        <div style={{
+          position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)",
+          display: "flex", alignItems: "center", gap: 14,
+          background: C.text, color: C.bg, borderRadius: 100,
+          padding: "10px 12px 10px 20px",
+          boxShadow: "0 8px 32px rgba(28,25,23,0.25)",
+          zIndex: 50,
+        }}>
+          <span style={{ fontFamily: SANS, fontWeight: 600, fontSize: 13.5 }}>
+            {reportSelection.size} test{reportSelection.size !== 1 ? "s" : ""} selected
+          </span>
+          <button
+            onClick={() => setReportSelection(new Set())}
+            style={{
+              fontFamily: SANS, fontSize: 12.5, color: C.ghost, background: "transparent",
+              border: "none", cursor: "pointer", padding: "6px 4px",
+            }}
+          >
+            Clear
+          </button>
+          <a
+            href={`/print?person=${person}&markers=${encodeURIComponent(Array.from(reportSelection).join(","))}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              fontFamily: SANS, fontWeight: 600, fontSize: 13.5,
+              background: C.oliveLight, color: C.text,
+              borderRadius: 100, padding: "9px 18px",
+              textDecoration: "none", whiteSpace: "nowrap",
+            }}
+          >
+            Export as Print PDF →
+          </a>
+        </div>
+      )}
     </div>
   );
 }

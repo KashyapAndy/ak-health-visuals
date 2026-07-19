@@ -1,9 +1,12 @@
 "use client";
 
-import type { LatestValue } from "@/lib/api";
+import { isFlagCurrent, type LatestValue } from "@/lib/api";
 
 function getStatus(v: LatestValue): "high" | "low" | "normal" | "qualitative" {
   if (v.value === null) return "qualitative";
+  // A ref-range breach from a stale report isn't clinically relevant today —
+  // see CLAUDE.md "Flag recency rule".
+  if (!isFlagCurrent(v.date)) return "normal";
   if (v.flag?.toUpperCase() === "H") return "high";
   if (v.flag?.toUpperCase() === "L") return "low";
   if (v.ref_high != null && v.value > v.ref_high) return "high";

@@ -1,9 +1,10 @@
 # Health Dashboard — CLAUDE.md
 
 ## Project purpose
-Personal health dashboard for Anirudh Kashyap (AK).
+Personal health dashboard for Anirudh Kashyap (AK) and Rashmi Kashyap (RK, wife).
 Tracks pathology results, CBC, vitals over 15 years via PDF ingestion.
-RK (wife) data exists in the DB but the dashboard is AK-only — do not add a person switcher.
+A `PersonSwitcher` in the header toggles between AK and RK; backend endpoints
+already accept a `person` query param (`AK`/`RK`) for every route.
 
 ## Stack
 - **Ingestion**: Python + Claude API (claude-opus-4-8) for PDF parsing
@@ -75,7 +76,8 @@ Satoshi is loaded via `<link>` tag in layout.tsx (Fontshare, not Google Fonts �
 DM Mono is loaded via `next/font/google` with CSS variable `--font-dm-mono`.
 
 ### Page layout (app/page.tsx)
-- `PERSON = "AK"` hardcoded — no person switcher
+- `person` is component state (`useState<Person>("AK")`), toggled via `PersonSwitcher` in the header. Switching person refetches categories/latest/vitals and resets the active tab and selected biomarker.
+- The "5-Year Narrative" overview section (prose + milestone timeline) is hardcoded AK medical history — gated behind `person === "AK"`. RK's overview shows stats bar, flagged grid, and latest values only, until RK-specific narrative copy is written.
 - Sticky header with blur backdrop, horizontal tab bar
 - Tabs: Overview + one per category + Vitals
 - Switching tabs resets selected biomarker and chart
@@ -89,6 +91,9 @@ DM Mono is loaded via `next/font/google` with CSS variable `--font-dm-mono`.
 3. **Flagged values grid** — StatCards for all flagged markers
 4. **Inline chart** — expands below flagged grid when a marker is selected
 5. **Latest values grid** — all 58+ quantitative markers as StatCards
+
+### Flag recency rule (applies to AK and RK)
+A biomarker is only shown as flagged (red/high or amber/low) if its **most recent report is within the last 2 years**. If the latest available test for that marker is older than 2 years, it must render as normal/unflagged regardless of the stored `flag` value or a ref-range comparison — an out-of-range result from 5 years ago is stale and not clinically relevant today. This affects every place a biomarker's status is colored from its latest value (e.g. `getStatus()` in `LatestCard.tsx`, the Overview flagged-values grid, stat tiles) — the recency check must be added wherever flag color is derived, not just one component.
 
 ### BiomarkerChart.tsx
 - ComposedChart with Area (gradient fill) + Line
@@ -175,23 +180,28 @@ The pipeline is **four scripts** run in order. All are idempotent — safe to re
 
 ```
 ingestion/
-  rename.py          # Phase 1 — rename raw PDFs to YYYYMMDD_Provider_AK.pdf
+  rename.py          # Phase 1 — rename raw PDFs/HTML to YYYYMMDD_Provider_AK.<ext>
   extract.py         # Phase 2 — Claude API → structured JSON
   renormalize.py     # Phase 2b — re-apply biomarker_map without re-calling API
   load.py            # Phase 3 — JSON → SQLite
   biomarker_map.py   # Registry — canonical names, units, conversions, ref ranges
-  debug_noise.py     # Dev utility — inspect unrecognized biomarker names
+  doc_utils.py        # Shared helper — builds Claude content blocks for PDF or HTML source files
+  find_duplicates.py  # Dev utility — read-only report flagging likely duplicate reports across sources
+  debug_noise.py      # Dev utility — inspect unrecognized biomarker names
 ```
 
 ### Phase 1 — rename.py
-Renames PDFs dropped into `raw_pdfs/AK/` or `raw_pdfs/RK/` to the canonical `YYYYMMDD_Provider_PERSON.pdf` format. Originals are moved to `raw_pdfs/AK/archive/`.
+Renames PDFs **and HTML files** dropped into `raw_pdfs/AK/` or `raw_pdfs/RK/` to the canonical `YYYYMMDD_Provider_PERSON.<ext>` format (original extension preserved). Originals are moved to `raw_pdfs/<PERSON>/archive/`.
 
 ### Phase 2 — extract.py
-- Sends each PDF (base64-encoded) to `claude-opus-4-8` with a strict JSON extraction prompt
+- Sends each file to `claude-opus-4-8`: PDFs as base64 document blocks, HTML/HTM as raw text (there's no "document" media type for HTML in the Messages API — Claude reads inline markup fine)
 - The prompt instructs Claude to return raw names and raw units **exactly as printed** — normalization is handled by our code, not the model
 - After extraction, immediately applies `normalize_name()`, `normalize_unit()`, and `get_fallback_refs()` from `biomarker_map.py`
 - Output saved to `data/processed/<PERSON>/<filename>.json`
 - **Idempotent**: skips files that already have a `.json` output
+
+### find_duplicates.py — cross-source duplicate detection
+If a provider portal export (e.g. HTML) might be re-reporting a blood draw already captured by a PDF from another lab, run `python ingestion/find_duplicates.py --person RK` after `extract.py`. It compares `report_date` and biomarker value overlap across all processed JSONs for a person and prints a table of likely-duplicate pairs. It's **read-only** — it never deletes anything; you decide which source file (if any) to drop before running `load.py`.
 
 Key extraction rules baked into the prompt:
 - `report_date`: specimen collection date preferred over report date

@@ -36,3 +36,13 @@ body {
 .fade-up { animation: fadeUp 0.45s cubic-bezier(0.25,0.46,0.45,0.94) both; }
 
 .recharts-tooltip-wrapper { outline: none; }
+
+/* Horizontally-scrollable tab bar — scrolls with trackpad/swipe/arrow keys,
+   just without a visible scrollbar strip in the header. */
+.tab-scroll {
+  scrollbar-width: none;     /* Firefox */
+  -ms-overflow-style: none;  /* legacy Edge */
+}
+.tab-scroll::-webkit-scrollbar {
+  display: none;             /* Chrome, Safari, Chromium Edge */
+}
