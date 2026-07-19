@@ -283,7 +283,7 @@ export default function Dashboard() {
         </div>
 
         {/* Tab bar */}
-        <div style={{ display: "flex", gap: 0, overflowX: "auto", marginTop: "0.5rem" }}>
+        <div className="tab-scroll" style={{ display: "flex", gap: 0, overflowX: "auto", marginTop: "0.5rem" }}>
           {tabs.map(t => {
             const isActive = activeTab === t.id;
             return (
