@@ -1,4 +1,4 @@
-# AK Health Visuals
+# Kashyap House, MD
 
 A personal health dashboard tracking 15 years of pathology results, CBC panels, vitals, and metabolic markers — built to turn a drawer full of PDF lab reports into an interactive, longitudinal health record.
 

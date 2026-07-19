@@ -10,7 +10,7 @@ const dmMono = DM_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Anirudh's Health Record",
+  title: "Kashyap House, MD",
   description: "15 years of personal health tracking",
 };
 

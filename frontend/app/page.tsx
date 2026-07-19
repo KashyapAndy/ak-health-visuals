@@ -257,6 +257,9 @@ export default function Dashboard() {
         {/* Top row */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "1.1rem 0 0" }}>
           <div>
+            <div style={{ fontFamily: MONO, fontSize: "0.62rem", fontWeight: 500, color: C.olive, letterSpacing: "0.12em", marginBottom: 2 }}>
+              KASHYAP HOUSE, MD
+            </div>
             <div style={{ fontFamily: SANS, fontWeight: 700, fontSize: "1rem", color: C.text, letterSpacing: "-0.01em" }}>
               {PERSON_NAME[person].toUpperCase()}
             </div>
@@ -629,7 +632,7 @@ export default function Dashboard() {
       </main>
 
       <footer style={{ borderTop: `1px solid rgba(77,124,15,0.08)`, padding: "1.2rem 9%", textAlign: "center", fontFamily: MONO, fontSize: "0.72rem", color: C.ghost }}>
-        {PERSON_NAME[person]} · Personal Health Record · Local &amp; Private
+        {PERSON_NAME[person]} · Kashyap House, MD · Local &amp; Private
       </footer>
 
       {/* Floating print-report bar */}

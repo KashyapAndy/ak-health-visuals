@@ -1,4 +1,4 @@
-# Health Dashboard — CLAUDE.md
+# Kashyap House, MD — CLAUDE.md
 
 ## Project purpose
 Personal health dashboard for Anirudh Kashyap (AK) and Rashmi Kashyap (RK, wife).

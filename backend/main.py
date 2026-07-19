@@ -1,5 +1,5 @@
 """
-Health Dashboard — FastAPI backend
+Kashyap House, MD — FastAPI backend
 """
 
 from fastapi import FastAPI, Query, HTTPException
@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import sqlite3
 from pathlib import Path
 
-app = FastAPI(title="Health Dashboard API")
+app = FastAPI(title="Kashyap House, MD API")
 
 app.add_middleware(
     CORSMiddleware,
