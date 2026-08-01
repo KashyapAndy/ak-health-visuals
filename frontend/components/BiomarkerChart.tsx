@@ -83,7 +83,11 @@ export function BiomarkerChart({ data, person, showInfo = true }: { data: Biomar
   const latestColor = flagColor(latest.flag);
   const isAbnormal = !!latest.flag;
 
-  const baseChartData = points.map(p => ({ ...p, date: p.date.slice(0, 7) }));
+  // Keep the full date as the x-axis key (not truncated to "YYYY-MM") so
+  // multiple same-month visits — common for RK's frequent CBC monitoring —
+  // don't collide onto the same category and hide each other's tooltip.
+  // The tick label below is formatted back down to "YYYY-MM" for display.
+  const baseChartData = points.map(p => ({ ...p }));
   const gradId = `grad-${name.replace(/\W+/g, "")}`;
   const info = getBiomarkerInfo(name);
 
@@ -95,13 +99,44 @@ export function BiomarkerChart({ data, person, showInfo = true }: { data: Biomar
   const chartData = [...baseChartData];
   for (const ev of relevantEvents) {
     if (!baseChartDates.includes(ev.date)) {
-      const insertIdx = chartData.findIndex(d => d.date > ev.date);
+      let insertIdx = chartData.findIndex(d => d.date > ev.date);
+      // Recharts' Line/Area connectNulls fails to bridge over a null point
+      // that lands as the second-to-last element (the line stops short of
+      // the final dot) -- happens when a sparse tail leaves a big gap
+      // between the last two real readings and the event falls in it. Nudge
+      // the placeholder one slot earlier so it's never adjacent to the end.
+      if (insertIdx === chartData.length - 1 && chartData.length > 1) insertIdx -= 1;
       const nullPoint = { date: ev.date, value: null, text_value: null, flag: null };
       if (insertIdx === -1) chartData.push(nullPoint);
       else chartData.splice(insertIdx, 0, nullPoint);
     }
   }
   const chartDates = chartData.map(d => d.date);
+
+  // Suppress most tick label *text* via the formatter rather than via
+  // Recharts' `interval`/`ticks` props — both of those turned out to also
+  // shrink the set of points that can trigger the tooltip on hover (with
+  // full daily-granularity x-axis keys, needed so same-month visits don't
+  // collide, dense datasets like RK's have 100+ categories, and both props
+  // silently drop most of them from hit-testing, not just from the label).
+  // interval={0} keeps every category fully interactive; only the label
+  // string is empty for the ones we don't want to show.
+  // Evenly interpolated across the full index range (always including index
+  // 0 and the last index) rather than a fixed step from the start with the
+  // last index tacked on separately — a fixed step leaves a leftover final
+  // gap that's often much smaller than the rest, so the last two labels
+  // collide instead of staying evenly spaced.
+  const TARGET_TICK_COUNT = 8;
+  const n = chartDates.length;
+  const tickIndices = new Set<number>();
+  if (n <= TARGET_TICK_COUNT) {
+    for (let i = 0; i < n; i++) tickIndices.add(i);
+  } else {
+    for (let i = 0; i < TARGET_TICK_COUNT; i++) {
+      tickIndices.add(Math.round((i * (n - 1)) / (TARGET_TICK_COUNT - 1)));
+    }
+  }
+  const formatXTick = (d: string, i: number) => tickIndices.has(i) ? d.slice(0, 7) : "";
 
   return (
     <div className="fade-up" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -156,7 +191,7 @@ export function BiomarkerChart({ data, person, showInfo = true }: { data: Biomar
 
         {/* Chart */}
         <ResponsiveContainer width="100%" height={260}>
-          <ComposedChart data={chartData} margin={{ top: 4, right: 6, bottom: 0, left: 0 }}>
+          <ComposedChart data={chartData} margin={{ top: 4, right: 28, bottom: 0, left: 0 }}>
             <defs>
               <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor={isAbnormal ? C.red : C.olive} stopOpacity={0.18} />
@@ -182,7 +217,7 @@ export function BiomarkerChart({ data, person, showInfo = true }: { data: Biomar
               />
             ))}
 
-            <XAxis dataKey="date" tick={{ fontFamily: MONO, fontSize: 10, fill: C.muted }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
+            <XAxis dataKey="date" tick={{ fontFamily: MONO, fontSize: 10, fill: C.muted }} tickLine={false} axisLine={false} interval={0} tickFormatter={formatXTick} />
             <YAxis domain={[yMin, yMax]} tick={{ fontFamily: MONO, fontSize: 10, fill: C.muted }} tickLine={false} axisLine={false} width={42} tickFormatter={v => Number(v.toFixed(1)).toString()} />
             <Tooltip content={<CustomTooltip />} />
 

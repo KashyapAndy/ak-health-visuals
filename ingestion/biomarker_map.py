@@ -40,7 +40,12 @@ REGISTRY: list[Biomarker] = [
         canonical_name="WBC",
         canonical_unit="10³/µL",
         category="CBC",
-        name_aliases=["wbc", "white blood cell", "white blood cells",
+        # "White Blood Cell(s)" deliberately excluded — that exact phrase is
+        # also how urine-microscopic panels report a totally different test
+        # (WBC per high-power field); see the dedicated "Urine WBC" entry.
+        # Only the CBC-context "WBC" abbreviation and its close variants
+        # belong here.
+        name_aliases=["wbc",
                       "white blood count", "leukocytes", "total wbc",
                       "total leukocyte count", "tlc",
                       "white blood cell count", "wbc count",
@@ -51,7 +56,9 @@ REGISTRY: list[Biomarker] = [
             "thou/ul": 1, "×10³/µl": 1, "x10³/µl": 1,
             "10⁹/l": 1,   # 10⁹/L == 10³/µL
             "/cumm": 0.001, "cells/cumm": 0.001, "/mm³": 0.001,
-            "thous/mcl": 1, "thds/cmm": 0.001, "thous/cmm": 0.001,
+            # THDS/CMM = "thousand per cubic mm" -- already expressed in
+            # thousands, same scale as canonical 10³/µL, so no rescale.
+            "thous/mcl": 1, "thds/cmm": 1, "thous/cmm": 1,
             "x10e3/ul": 1, "x10(3)/mcl": 1,
         "thousand per microliter": 1},
         ref_low=4.5, ref_high=11.0,
@@ -60,7 +67,12 @@ REGISTRY: list[Biomarker] = [
         canonical_name="RBC",
         canonical_unit="10⁶/µL",
         category="CBC",
-        name_aliases=["rbc", "red blood cell", "red blood cells",
+        # "Red Blood Cell(s)" deliberately excluded — that exact phrase is
+        # also how urine-microscopic panels report a totally different test
+        # (RBC per high-power field); see the dedicated "Urine RBC" entry.
+        # Only the CBC-context "RBC" abbreviation and its close variants
+        # belong here.
+        name_aliases=["rbc",
                       "red blood count", "erythrocytes", "red cell count",
                       "red blood cell count", "red cell count",
                       "erythrocytes bld ncnc pt qn"],
@@ -68,7 +80,9 @@ REGISTRY: list[Biomarker] = [
             "10⁶/µl": 1, "10^6/ul": 1, "m/ul": 1, "mil/ul": 1,
             "×10⁶/µl": 1, "x10⁶/µl": 1, "10¹²/l": 1,
             "/cumm": 0.000001, "/mm³": 0.000001,
-            "mill/mcl": 1, "mill/cmm": 0.000001, "x10e6/ul": 1,
+            # MILL/CMM = "million per cubic mm" -- already expressed in
+            # millions, same scale as canonical 10⁶/µL, so no rescale.
+            "mill/mcl": 1, "mill/cmm": 1, "x10e6/ul": 1,
             "x10(6)/mcl": 1, "million/ul": 1,
         "million per microliter": 1},
         ref_low=4.5, ref_high=5.9,
@@ -193,7 +207,7 @@ REGISTRY: list[Biomarker] = [
                       "absolute neutrophil count", "anc",
                       "neut abs", "neut #",
                       "neutrophils (absolute)", "neutrophils(absolute)",
-                      "neutro absolute", "neutro abs",
+                      "neutro absolute", "neutro abs", "neutrophils absolute",
                       "neutrophils bld ncnc pt qn", "granulocytes bld ncnc pt qn"],
         unit_conversions={
             "10³/µl": 1, "k/ul": 1, "10⁹/l": 1,
@@ -220,7 +234,7 @@ REGISTRY: list[Biomarker] = [
         name_aliases=["lymphocytes abs", "absolute lymphocytes",
                       "lymphs abs", "lymph abs", "lymph #",
                       "lymphs (absolute)", "lymphocytes (absolute)",
-                      "lymph absolute", "lymphocytes #",
+                      "lymph absolute", "lymphocytes #", "lymphocytes absolute",
                       "lymphocytes bld ncnc pt qn", "lymphs"],
         unit_conversions={
             "10³/µl": 1, "k/ul": 1, "10⁹/l": 1,
@@ -245,7 +259,7 @@ REGISTRY: list[Biomarker] = [
         category="CBC Differential",
         name_aliases=["monocytes abs", "absolute monocytes", "monos abs",
                       "monocyte abs", "monocytes (absolute)", "monocytes(absolute)",
-                      "mono abs", "mono #", "monocytes #",
+                      "mono abs", "mono #", "monocytes #", "monocytes absolute",
                       "monocytes bld ncnc pt qn"],
         unit_conversions={
             "10³/µl": 1, "k/ul": 1, "10⁹/l": 1,
@@ -270,7 +284,7 @@ REGISTRY: list[Biomarker] = [
         category="CBC Differential",
         name_aliases=["eosinophils abs", "absolute eosinophils", "eos abs",
                       "eosinophil abs", "eosinophils (absolute)", "eos (absolute)",
-                      "eos(absolute)", "eosinophils #",
+                      "eos(absolute)", "eosinophils #", "eosinophils absolute",
                       "eosinophils bld ncnc pt qn"],
         unit_conversions={
             "10³/µl": 1, "k/ul": 1, "10⁹/l": 1,
@@ -296,7 +310,7 @@ REGISTRY: list[Biomarker] = [
         category="CBC Differential",
         name_aliases=["basophils abs", "absolute basophils", "baso abs",
                       "basophil abs", "basophils (absolute)", "baso (absolute)",
-                      "baso(absolute)", "basophils #",
+                      "baso(absolute)", "basophils #", "basophils absolute",
                       "basophils bld ncnc pt qn"],
         unit_conversions={
             "10³/µl": 1, "k/ul": 1, "10⁹/l": 1,
@@ -322,7 +336,8 @@ REGISTRY: list[Biomarker] = [
         category="CBC Differential",
         name_aliases=["immature grans (abs)", "imm gran absolute",
                       "absolute immature grans", "immature grans abs", "ig abs",
-                      "imm gran #", "granulocytes.immature bld ncnc pt qn automated count"],
+                      "imm gran #", "granulocytes.immature bld ncnc pt qn automated count",
+                      "immature granulocytes absolute"],
         unit_conversions={
             "10³/µl": 1, "k/ul": 1, "10⁹/l": 1,
             "/cumm": 0.001, "/mm³": 0.001,
@@ -385,7 +400,7 @@ REGISTRY: list[Biomarker] = [
                       "gfr non african american", "gfr african american",
                       "egfr non-afr. american", "egfr african american",
                       "egfr non african american", "egfr african amer",
-                      "egfr non-african amer", "gfr estimated",
+                      "egfr non-african amer", "gfr estimated", "egfr 2021 ckd-epi",
                       "glomerular filtration rate/1.73 sq m.predicted.black ser/plas/bld arvrat pt qn creatinine-based formula (mdrd)",
                       "glomerular filtration rate/1.73 sq m.predicted.non black ser/plas/bld arvrat pt qn creatinine-based formula (mdrd)"],
         unit_conversions={
@@ -780,7 +795,7 @@ REGISTRY: list[Biomarker] = [
                       "25-oh vit d",
                       "vitamin d,25-oh,total", "vitamin d,25-oh,total,ia",
                       "vitamin d,25-oh, d3", "vitamin d,25-oh, d2",
-                      "vitamin d, 25-oh", "vitamin d (25-oh)",
+                      "vitamin d, 25-oh", "vitamin d (25-oh)", "vitamin d, 25 oh",
                       "calcidiol ser/plas mcnc pt qn", "calcidiol+ercalcidiol ser/plas mcnc pt qn"],
         unit_conversions={
             "ng/ml": 1,
@@ -1055,7 +1070,7 @@ REGISTRY: list[Biomarker] = [
     Biomarker(
         canonical_name="Oxygen Saturation",
         canonical_unit="%",
-        category="Vitals",
+        category="Pulmonary",
         name_aliases=["oxygen saturation", "o2 sat", "spo2", "pulse ox"],
         unit_conversions={"%": 1},
         ref_low=95.0, ref_high=100.0,
@@ -1178,6 +1193,26 @@ REGISTRY: list[Biomarker] = [
         category="Urinalysis",
         name_aliases=["casts", "urine casts"],
         unit_conversions={"": 1},
+    ),
+    Biomarker(
+        canonical_name="Urine WBC",
+        canonical_unit="/HPF",
+        category="Urinalysis",
+        # Urine-microscopic WBC-per-high-power-field count -- distinct from
+        # the blood "WBC" CBC test despite the shared plain-English name.
+        name_aliases=["white blood cells", "white blood cell",
+                      "wbc (urine)", "urine wbc"],
+        unit_conversions={"hpf": 1, "": 1},
+    ),
+    Biomarker(
+        canonical_name="Urine RBC",
+        canonical_unit="/HPF",
+        category="Urinalysis",
+        # Urine-microscopic RBC-per-high-power-field count -- distinct from
+        # the blood "RBC" CBC test despite the shared plain-English name.
+        name_aliases=["red blood cells", "red blood cell",
+                      "rbc (urine)", "urine rbc"],
+        unit_conversions={"hpf": 1, "": 1},
     ),
 
     # =========================================================================
@@ -1327,7 +1362,7 @@ REGISTRY: list[Biomarker] = [
 # =========================================================================
 
 _NOISE = re.compile(
-    r",?\s*\b(calculated|calc|serum|blood|level|levels)\b\s*",
+    r",?\s*\b(calculated|calc|serum|blood|level|levels|automated)\b\s*",
     re.IGNORECASE,
 )
 

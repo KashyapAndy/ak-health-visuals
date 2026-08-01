@@ -20,7 +20,11 @@ DB_PATH = Path(__file__).parent.parent / "data" / "health.db"
 
 # Exclude: reports with bad/unreliable data, and clinical categories not useful for trending
 EXCLUDED_DATES = ("2018-11",)          # BADDATE_SunriseMedical — unreliable panel
-EXCLUDED_CATEGORIES = {"Drug Screen"}  # not useful for health trending
+EXCLUDED_CATEGORIES = {
+    "Drug Screen",         # not useful for health trending
+    "Infectious Disease",  # results are all qualitative (Negative/Non Reactive) —
+                            # isQuantitative filtering leaves this tab permanently blank
+}
 
 # Minimum number of reports a biomarker must appear in to be shown
 MIN_REPORTS = 2
@@ -228,6 +232,19 @@ def vitals_history(person: str = Query("AK")):
         WHERE r.person_id = ? AND {exc}
           AND (v.weight_lbs IS NOT NULL OR v.bp_systolic IS NOT NULL)
         ORDER BY r.report_date
+    """, (person,)).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+@app.get("/api/vaccines")
+def vaccine_history(person: str = Query("AK")):
+    conn = get_db()
+    rows = conn.execute("""
+        SELECT vaccine_name, date_given, provider
+        FROM vaccinations
+        WHERE person_id = ?
+        ORDER BY date_given DESC
     """, (person,)).fetchall()
     conn.close()
     return [dict(r) for r in rows]

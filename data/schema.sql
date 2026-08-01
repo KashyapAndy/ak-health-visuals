@@ -35,6 +35,18 @@ CREATE TABLE IF NOT EXISTS vitals (
     temperature  REAL      -- °F
 );
 
+CREATE TABLE IF NOT EXISTS vaccinations (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    person_id      TEXT    NOT NULL,        -- 'AK' or 'RK'
+    vaccine_name   TEXT    NOT NULL,        -- e.g. 'COVID-19', 'Flu', 'Tdap'
+    date_given     TEXT    NOT NULL,        -- ISO date: YYYY-MM-DD
+    provider       TEXT,                    -- e.g. 'CVS Pharmacy', 'Registry'
+    source_file    TEXT    NOT NULL,
+    ingested_at    TEXT    DEFAULT (datetime('now')),
+    UNIQUE(person_id, vaccine_name, date_given)
+);
+
 CREATE INDEX IF NOT EXISTS idx_biomarkers_name      ON biomarkers(name);
 CREATE INDEX IF NOT EXISTS idx_biomarkers_report_id ON biomarkers(report_id);
 CREATE INDEX IF NOT EXISTS idx_reports_person_date  ON reports(person_id, report_date);
+CREATE INDEX IF NOT EXISTS idx_vaccinations_person   ON vaccinations(person_id, date_given);

@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { BiomarkerChart } from "@/components/BiomarkerChart";
 import { VitalsPanel } from "@/components/VitalsPanel";
+import { VaccinesPanel } from "@/components/VaccinesPanel";
 import { PersonSwitcher } from "@/components/PersonSwitcher";
 import {
   api,
@@ -11,6 +12,7 @@ import {
   type BiomarkerHistory,
   type LatestValue,
   type VitalsPoint,
+  type VaccineRecord,
   type Person,
 } from "@/lib/api";
 
@@ -169,6 +171,7 @@ export default function Dashboard() {
   const [chartLoading, setChartLoading] = useState(false);
   const [latest, setLatest] = useState<LatestValue[]>([]);
   const [vitals, setVitals] = useState<VitalsPoint[]>([]);
+  const [vaccines, setVaccines] = useState<VaccineRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reportSelection, setReportSelection] = useState<Set<string>>(new Set());
@@ -188,8 +191,8 @@ export default function Dashboard() {
     setSelectedBiomarker("");
     setChartData(null);
     setReportSelection(new Set());
-    Promise.all([api.categories(person), api.latest(person), api.vitals(person)])
-      .then(([cats, lat, vit]) => {
+    Promise.all([api.categories(person), api.latest(person), api.vitals(person), api.vaccines(person)])
+      .then(([cats, lat, vit, vax]) => {
         setCategories(cats);
         // A flag from a report older than the recency window is stale —
         // clear it so no downstream view (stats bar, flagged grid, StatCard
@@ -197,6 +200,7 @@ export default function Dashboard() {
         // recency rule".
         setLatest(lat.filter(isQuantitative).map(v => isFlagCurrent(v.date) ? v : { ...v, flag: null }));
         setVitals(vit);
+        setVaccines(vax);
       })
       .catch(() => setError("Cannot reach the API — is FastAPI running on port 8000?"))
       .finally(() => setLoading(false));
@@ -224,6 +228,7 @@ export default function Dashboard() {
     { id: "overview", label: "Overview" },
     ...categories.map(c => ({ id: c.category, label: c.category })),
     { id: "vitals", label: "Vitals" },
+    { id: "vaccines", label: "Vaccines" },
   ];
 
   const categoryLatest = (cat: string) => {
@@ -628,6 +633,11 @@ export default function Dashboard() {
         {/* ── Vitals ────────────────────────────────────────────── */}
         {!loading && !error && activeTab === "vitals" && (
           <VitalsPanel data={vitals} />
+        )}
+
+        {/* ── Vaccines ──────────────────────────────────────────── */}
+        {!loading && !error && activeTab === "vaccines" && (
+          <VaccinesPanel data={vaccines} />
         )}
       </main>
 

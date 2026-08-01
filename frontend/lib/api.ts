@@ -47,6 +47,12 @@ export interface VitalsPoint {
   temperature: number | null;
 }
 
+export interface VaccineRecord {
+  vaccine_name: string;
+  date_given: string;
+  provider: string | null;
+}
+
 // A biomarker only counts as flagged if its latest report is within this
 // many years — an out-of-range result from years ago isn't clinically
 // relevant today. Applies to both AK and RK. See CLAUDE.md "Flag recency rule".
@@ -76,4 +82,6 @@ export const api = {
     get<VitalsPoint[]>(`/api/vitals?person=${person}`),
   latest: (person: Person) =>
     get<LatestValue[]>(`/api/latest?person=${person}`),
+  vaccines: (person: Person) =>
+    get<VaccineRecord[]>(`/api/vaccines?person=${person}`),
 };
